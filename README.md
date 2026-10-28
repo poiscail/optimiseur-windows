@@ -5,8 +5,16 @@ ce qu'il faut nettoyer, quelles applications désinstaller et quels programmes l
 
 ## Installation
 
-1. Téléchargez le projet (bouton vert **Code** → *Download ZIP*) puis décompressez-le.
-2. Double-cliquez sur **Lancer.bat** et acceptez la demande d'administrateur.
+**Le plus simple :** téléchargez **OptimiseurWindows.exe** dans la section *Releases* (à droite de la page),
+double-cliquez dessus et acceptez la demande d'administrateur.
+
+> L'exe n'est pas signé : Windows peut afficher « Windows a protégé votre ordinateur ».
+> Cliquez sur *Informations complémentaires* → *Exécuter quand même*.
+
+**Sans l'exe :** téléchargez le projet (bouton vert **Code** → *Download ZIP*), décompressez-le
+et double-cliquez sur **Lancer.bat**.
+
+Pour recompiler l'exe vous-même : `Install-Module ps2exe -Scope CurrentUser` puis lancez `Build-Exe.ps1`.
 
 ## Les 3 onglets
 
