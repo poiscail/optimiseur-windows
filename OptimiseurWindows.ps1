@@ -118,6 +118,7 @@ function Split-Command([string]$Command) {
     $c = [Environment]::ExpandEnvironmentVariables($Command.Trim())
     if ($c -match '^"([^"]+)"\s*(.*)$')    { return $Matches[1], $Matches[2] }
     if ($c -match '^(.+?\.exe)\s*(.*)$')   { return $Matches[1], $Matches[2] }
+    if ($c -match '^(\S+)\s*(.*)$')        { return $Matches[1], $Matches[2] }   # ex. "winget uninstall ..."
     return $c, ''
 }
 
@@ -304,9 +305,20 @@ $RecommendedApps = @(
 $ProtectedApps = @(
     'Microsoft.WindowsStore', 'Microsoft.StorePurchaseApp', 'Microsoft.DesktopAppInstaller', 'Microsoft.SecHealthUI',
     'Microsoft.Services.Store.Engagement', 'Microsoft.MicrosoftEdge*', 'Microsoft.WindowsAppRuntime*', 'Microsoft.Winget.*', 'Microsoft.VCLibs*',
-    'Microsoft.UI.Xaml*', 'Microsoft.NET.*', '*Extension', '*Extensions')
+    'Microsoft.UI.Xaml*', 'Microsoft.NET.*', '*Extension', '*Extensions', 'Microsoft.LanguageExperiencePack*',
+    'MicrosoftWindows.Speech.*', 'MicrosoftWindows.Voice.*', 'Microsoft.ApplicationCompatibilityEnhancements',
+    'Microsoft.XboxIdentityProvider')
+
+# Paquet "d'intégration" (menu clic droit) installé par un programme classique, déjà listé avec lui.
+function Test-SparsePackage($Package) {
+    $m = Join-Path ([string]$Package.InstallLocation) 'AppxManifest.xml'
+    (Test-Path -LiteralPath $m) -and ((Get-Content -LiteralPath $m -Raw -ErrorAction SilentlyContinue) -match '<(\w+:)?AllowExternalContent>\s*true')
+}
 $ProtectedPrograms = @('Microsoft Visual C++*', 'Microsoft .NET*', 'Microsoft Windows Desktop Runtime*', 'Microsoft ASP.NET*',
-    'Microsoft Edge*', 'Microsoft Update Health Tools', 'Windows Software Development Kit*')
+    'Microsoft Edge*', 'Microsoft Update Health Tools', 'Windows Software Development Kit*',
+    'Microsoft Windows Application Compatibility*', '*Pilote graphique*', '*Graphics Driver*')
+# Lancés au démarrage mais nécessaires (icône de Sécurité Windows)
+$ProtectedStartup = @('SecurityHealth')
 
 function Import-AppRows {
     Set-Busy $true
@@ -315,9 +327,11 @@ function Import-AppRows {
     $script:Provisioned = @(Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue)
     $rows = New-Object System.Collections.Generic.List[object]
 
-    $pkgs = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object {
+    $all = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue)
+    if (-not $all) { $all = @(Get-AppxPackage -ErrorAction SilentlyContinue) }
+    $pkgs = $all | Where-Object {
         -not $_.IsFramework -and -not $_.IsResourcePackage -and -not $_.NonRemovable -and
-        $_.SignatureKind -ne 'System' -and -not (Test-Like $_.Name $ProtectedApps) }
+        $_.SignatureKind -ne 'System' -and -not (Test-Like $_.Name $ProtectedApps) -and -not (Test-SparsePackage $_) }
     foreach ($g in $pkgs | Group-Object Name) {
         $p = $g.Group[0]
         $reco = Test-Like $p.Name $RecommendedApps
@@ -342,7 +356,7 @@ function Import-AppRows {
         $seen[$e.DisplayName] = $true
         $rows.Add([pscustomobject]@{
             Kind = 'win32'; Id = $e.PSChildName; Checked = $false; Group = 'win32'
-            Name = $e.DisplayName; Publisher = $e.Publisher; Packages = @()
+            Name = $e.DisplayName.Trim(); Publisher = $e.Publisher; Packages = @()
             Size = $(if ($e.EstimatedSize) { [long]$e.EstimatedSize * 1KB } else { -1L })
             Uninstall = $e.UninstallString; Quiet = $e.QuietUninstallString
         })
@@ -379,7 +393,12 @@ function Update-AppCount {
 
 function Uninstall-AppRow($Row) {
     if ($Row.Kind -eq 'store') {
-        foreach ($p in $Row.Packages) { Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction Stop }
+        # Une erreur sur une ancienne version ne doit pas empêcher de retirer les autres : on vérifie à la fin.
+        foreach ($p in $Row.Packages | Sort-Object PackageFullName -Unique) {
+            try { Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction Stop }
+            catch { Remove-AppxPackage -Package $p.PackageFullName -ErrorAction SilentlyContinue }
+        }
+        if (Get-AppxPackage -AllUsers -Name $Row.Id -ErrorAction SilentlyContinue) { throw "Windows a refusé de retirer $($Row.Id)" }
         # Empêche la réinstallation automatique pour les nouveaux comptes
         foreach ($p in $script:Provisioned | Where-Object DisplayName -eq $Row.Id) {
             Remove-AppxProvisionedPackage -Online -PackageName $p.PackageName -ErrorAction SilentlyContinue | Out-Null
@@ -430,6 +449,7 @@ function Import-BgRows {
             }
         }
         foreach ($e in $entries) {
+            if ($e[0] -in $ProtectedStartup) { continue }
             $b = Get-RegValue $src.Approved $e[0]
             $rows.Add([pscustomobject]@{
                 Kind = 'startup'; Group = 'startup'; Name = ($e[0] -replace '\.lnk$', ''); Type = $src.Label; Detail = $e[1]
@@ -455,7 +475,8 @@ function Import-BgRows {
     $global = Get-RegValue $BgPolicy 'LetAppsRunInBackground'
     if ($global -eq 2) { Write-Log '   Note : une stratégie bloque déjà toutes les applis du Store en arrière-plan.' }
     $userApps = Get-AppxPackage -ErrorAction SilentlyContinue |
-        Where-Object { -not $_.IsFramework -and $_.SignatureKind -ne 'System' -and $names.ContainsKey($_.PackageFamilyName) } |
+        Where-Object { -not $_.IsFramework -and $_.SignatureKind -ne 'System' -and $names.ContainsKey($_.PackageFamilyName) -and
+                       -not (Test-Like $_.Name $ProtectedApps) } |
         Sort-Object PackageFamilyName -Unique
     foreach ($p in $userApps) {
         $pfn = $p.PackageFamilyName
@@ -500,9 +521,9 @@ function Set-BgState($Row, [bool]$Disable) {
             Set-Reg "$BgKey\$($Row.Pfn)" 'Disabled' ([int]$Disable)
             Set-Reg "$BgKey\$($Row.Pfn)" 'DisabledByUser' ([int]$Disable)
             # Windows 11 ignore parfois la clé ci-dessus : on ajoute aussi la stratégie par application.
-            $list = @(Get-RegValue $BgPolicy $BgDenyList | Where-Object { $_ -and $_ -ne $Row.Pfn })
-            if ($Disable) { $list += $Row.Pfn }
-            if ($list) { Set-Reg $BgPolicy $BgDenyList ([string[]]$list) 'MultiString' }
+            $deny = @(Get-RegValue $BgPolicy $BgDenyList | Where-Object { $_ -and $_ -ne $Row.Pfn })
+            if ($Disable) { $deny += $Row.Pfn }
+            if ($deny) { Set-Reg $BgPolicy $BgDenyList ([string[]]$deny) 'MultiString' }
             else { Remove-ItemProperty -Path $BgPolicy -Name $BgDenyList -ErrorAction SilentlyContinue }
         }
     }
@@ -781,6 +802,11 @@ $btnUninstall.Add_Click({
         $progress.Value++
     }
     Write-Log "$ok / $($selected.Count) application(s) désinstallée(s)."
+    # Beaucoup de désinstalleurs (Steam, Inno Setup, NSIS) rendent la main avant d'avoir fini.
+    if ($selected | Where-Object Kind -eq 'win32') {
+        [void][System.Windows.Forms.MessageBox]::Show("Terminez les fenêtres de désinstallation encore ouvertes, puis cliquez sur OK pour actualiser la liste.",
+            'Optimiseur Windows', 'OK', 'Information')
+    }
     Set-Busy $false
     Import-AppRows
     Update-Summary
