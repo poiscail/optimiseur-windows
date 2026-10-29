@@ -5,4 +5,4 @@ $src = Join-Path $PSScriptRoot 'OptimiseurWindows.ps1'
 $out = Join-Path $PSScriptRoot 'OptimiseurWindows.exe'
 Invoke-ps2exe -inputFile $src -outputFile $out -noConsole -requireAdmin -STA -x64 `
     -title 'Optimiseur Windows' -description 'Nettoyage et optimisation de Windows' -product 'Optimiseur Windows' `
-    -company 'poiscail' -version '1.0.1.0' -copyright 'poiscail'
+    -company 'poiscail' -version '1.1.0.0' -copyright 'poiscail'

@@ -21,8 +21,12 @@ Pour recompiler l'exe vous-même : `Install-Module ps2exe -Scope CurrentUser` pu
 ### 1. Nettoyage et réglages
 - L'analyse se lance toute seule : la colonne « Gain estimé » montre la place récupérable.
 - Cochez / décochez les actions (survolez une ligne pour le détail), puis **Optimiser maintenant**.
-- Fichiers temporaires, cache Windows Update, caches des navigateurs, WinSxS, télémétrie, publicités,
-  recherche Bing, Widgets, Recall, Game DVR, services inutiles...
+- **Nettoyage :** fichiers temporaires, cache Windows Update, caches des navigateurs et des applis
+  (Discord, Spotify, Steam), cache des shaders, anciens journaux, WinSxS...
+- **Confidentialité :** télémétrie, publicités, recherche Bing, Widgets, Recall, Copilot...
+- **Performances :** Game DVR, Edge en arrière-plan, partage des mises à jour, délai au démarrage, services inutiles...
+- **Confort :** extensions de fichiers visibles, « Fin de tâche » dans la barre des tâches, pas de redémarrage
+  forcé après les mises à jour, menu clic droit classique, accélération de la souris...
 
 ### 2. Désinstaller des applications
 - Liste **toutes** les applications du Microsoft Store et les programmes installés, avec leur taille.
@@ -33,7 +37,8 @@ Pour recompiler l'exe vous-même : `Install-Module ps2exe -Scope CurrentUser` pu
 - Les éléments indispensables (Store, Sécurité Windows, Edge, Visual C++, .NET...) ne sont pas proposés.
 
 ### 3. Démarrage et arrière-plan
-- Programmes lancés au démarrage de Windows (Discord, Steam...) et applications du Store autorisées
+- Programmes lancés au démarrage de Windows (Discord, Steam...), tâches planifiées des autres éditeurs
+  (programmes de mise à jour de NVIDIA, Ubisoft, Google...) et applications du Store autorisées
   à tourner en arrière-plan.
 - Cochez puis **Désactiver la sélection** ou **Réactiver la sélection**. Rien n'est supprimé :
   c'est le même réglage que le Gestionnaire des tâches et les Paramètres de Windows, donc 100 % réversible.

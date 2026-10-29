@@ -175,9 +175,25 @@ Add-Task 'clean' 'Cache des miniatures' "Aperçus d'images/vidéos, recréés au
 $BrowserCaches = @(
     "$Lad\Microsoft\Edge\User Data\*\Cache", "$Lad\Microsoft\Edge\User Data\*\Code Cache", "$Lad\Microsoft\Edge\User Data\*\GPUCache",
     "$Lad\Google\Chrome\User Data\*\Cache", "$Lad\Google\Chrome\User Data\*\Code Cache", "$Lad\Google\Chrome\User Data\*\GPUCache",
-    "$Lad\BraveSoftware\Brave-Browser\User Data\*\Cache", "$Lad\Mozilla\Firefox\Profiles\*\cache2")
-Add-Task 'clean' 'Cache des navigateurs (Edge, Chrome, Brave, Firefox)' 'Fermez vos navigateurs avant. Mots de passe, favoris et connexions sont conservés.' $true `
+    "$Lad\BraveSoftware\Brave-Browser\User Data\*\Cache", "$Lad\BraveSoftware\Brave-Browser\User Data\*\Code Cache",
+    "$Lad\Vivaldi\User Data\*\Cache", "$Lad\Opera Software\Opera Stable\Cache", "$Lad\Opera Software\Opera GX Stable\Cache",
+    "$Lad\Mozilla\Firefox\Profiles\*\cache2")
+Add-Task 'clean' 'Cache des navigateurs (Edge, Chrome, Brave, Opera, Vivaldi, Firefox)' 'Fermez vos navigateurs avant. Mots de passe, favoris et connexions sont conservés.' $true `
     -Size { Get-PathSize $BrowserCaches } -Run { Clear-Paths $BrowserCaches }
+
+$AppCaches = @(
+    "$env:APPDATA\discord\Cache", "$env:APPDATA\discord\Code Cache", "$env:APPDATA\discord\GPUCache",
+    "$Lad\Spotify\Data", "$Lad\Steam\htmlcache")
+Add-Task 'clean' 'Cache des applications (Discord, Spotify, Steam)' 'Fermez ces applications avant. Les musiques téléchargées et les connexions sont conservées.' $true `
+    -Size { Get-PathSize $AppCaches } -Run { Clear-Paths $AppCaches }
+
+$ShaderCaches = @("$Lad\D3DSCache", "$Lad\NVIDIA\DXCache", "$Lad\NVIDIA\GLCache", "$Lad\AMD\DxCache", "$Lad\AMD\DxcCache", "$Lad\AMD\GLCache")
+Add-Task 'clean' 'Cache des shaders (cartes graphiques)' 'Recréé automatiquement. Utile si un jeu saccade après une mise à jour du pilote ; les premiers lancements seront un peu plus lents.' $false `
+    -Size { Get-PathSize $ShaderCaches } -Run { Clear-Paths $ShaderCaches }
+
+$LogPaths = @("$WinDir\Logs\CBS\*.log", "$WinDir\Logs\CBS\*.cab", "$WinDir\Logs\DISM\*.log", "$WinDir\Logs\MeasuredBoot\*.log")
+Add-Task 'clean' 'Anciens journaux de Windows' "Fichiers .log des mises à jour et réparations, qui grossissent avec le temps." $true `
+    -Size { Get-PathSize $LogPaths } -Run { Clear-Paths $LogPaths }
 
 Add-Task 'clean' 'Vider la corbeille' 'Supprime définitivement le contenu de la corbeille.' $false `
     -Size { Get-PathSize (Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root '$Recycle.Bin' }) } `
@@ -211,6 +227,7 @@ Add-Task 'privacy' 'Réduire la télémétrie' 'Coupe la collecte de données de
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' 'AllowTelemetry' 0
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' 'DoNotShowFeedbackNotifications' 1
     Set-Reg 'HKCU:\Software\Microsoft\Siuf\Rules' 'NumberOfSIUFInPeriod' 0
+    Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Privacy' 'TailoredExperiencesWithDiagnosticDataEnabled' 0
     Disable-Svc 'DiagTrack', 'dmwappushservice'
     Get-ScheduledTask -TaskPath '\Microsoft\Windows\Customer Experience Improvement Program\' -ErrorAction SilentlyContinue |
         Disable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
@@ -248,11 +265,21 @@ Add-Task 'privacy' 'Widgets (actualités de la barre des tâches)' 'Désactive l
 Add-Task 'privacy' "Historique d'activités" "Windows n'enregistre plus les applications et fichiers que vous ouvrez." $true -Run {
     $p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
     Set-Reg $p 'EnableActivityFeed' 0; Set-Reg $p 'PublishUserActivities' 0; Set-Reg $p 'UploadUserActivities' 0
+    Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'Start_TrackProgs' 0
 }
 
 Add-Task 'privacy' 'Recall (captures IA de l''écran)' "Désactive l'enregistrement de captures d'écran par l'IA (PC Copilot+)." $true -Run {
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI' 'DisableAIDataAnalysis' 1
     Set-Reg 'HKCU:\Software\Policies\Microsoft\Windows\WindowsAI' 'DisableAIDataAnalysis' 1
+}
+
+Add-Task 'privacy' 'Copilot et « Click to Do »' 'Désactive Copilot dans Windows et retire son bouton de la barre des tâches.' $true -Run {
+    foreach ($root in 'HKLM:\SOFTWARE', 'HKCU:\Software') {
+        Set-Reg "$root\Policies\Microsoft\Windows\WindowsCopilot" 'TurnOffWindowsCopilot' 1
+        Set-Reg "$root\Policies\Microsoft\Windows\WindowsAI" 'DisableClickToDo' 1
+    }
+    Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'ShowCopilotButton' 0
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'HubsSidebarEnabled' 0
 }
 
 # --- Performances
@@ -263,6 +290,20 @@ Add-Task 'perf' 'Capture de jeu en arrière-plan (Game DVR)' "Évite l'enregistr
 
 Add-Task 'perf' 'Services inutiles' 'Désactive : gestionnaire de cartes, mode démo magasin, télécopie, partage Windows Media Player.' $true -Run {
     Disable-Svc 'MapsBroker', 'RetailDemo', 'Fax', 'WMPNetworkSvc'
+}
+
+Add-Task 'perf' 'Edge ne tourne plus en arrière-plan' "Coupe le « démarrage rapide » et l'exécution d'Edge une fois fermé (RAM libérée). Edge affichera « géré par votre organisation » : c'est normal." $true -Run {
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'StartupBoostEnabled' 0
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'BackgroundModeEnabled' 0
+}
+
+Add-Task 'perf' 'Ne plus partager les mises à jour avec d''autres PC' "Windows n'utilise plus votre connexion pour envoyer des mises à jour à des inconnus sur Internet." $true -Run {
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' 'DODownloadMode' 0
+}
+
+Add-Task 'perf' 'Démarrage sans délai des programmes' 'Windows attend normalement une dizaine de secondes avant de lancer les programmes du démarrage.' $true -Run {
+    $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize'
+    Set-Reg $p 'StartupDelayInMSec' 0; Set-Reg $p 'WaitForIdleState' 0
 }
 
 Add-Task 'perf' 'Menus plus réactifs' "Réduit le délai d'ouverture des menus de 400 à 100 ms." $true -Run {
@@ -292,6 +333,33 @@ Add-Task 'perf' 'Désactiver la mise en veille prolongée' 'Supprime hiberfil.sy
     -Size { $f = Get-Item "$Sys\hiberfil.sys" -Force -ErrorAction SilentlyContinue; if ($f) { $f.Length } else { -1 } } `
     -Run { powercfg /hibernate off | Out-Null }
 
+# --- Confort
+$Adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+Add-Task 'comfort' 'Afficher les extensions de fichiers' 'Montre « .exe », « .pdf »... : plus pratique et évite les pièges (facture.pdf.exe).' $true -Run {
+    Set-Reg $Adv 'HideFileExt' 0
+}
+
+Add-Task 'comfort' '« Fin de tâche » dans la barre des tâches' "Clic droit sur une appli bloquée dans la barre des tâches → Fin de tâche, sans ouvrir le Gestionnaire." $true -Run {
+    Set-Reg "$Adv\TaskbarDeveloperSettings" 'TaskbarEndTask' 1
+}
+
+Add-Task 'comfort' 'Raccourci des touches rémanentes' "Plus de fenêtre « touches rémanentes » quand on appuie 5 fois sur Maj (en jeu notamment)." $true -Run {
+    Set-Reg 'HKCU:\Control Panel\Accessibility\StickyKeys' 'Flags' '506' 'String'
+}
+
+Add-Task 'comfort' 'Pas de redémarrage forcé après une mise à jour' "Windows attend que vous redémarriez vous-même au lieu de fermer vos programmes pendant que vous êtes connecté." $true -Run {
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' 'NoAutoRebootWithLoggedOnUsers' 1
+}
+
+Add-Task 'comfort' 'Menu clic droit classique (Windows 10)' "Affiche directement toutes les options du clic droit, sans « Afficher plus d'options »." $false -Run {
+    Set-Reg 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32' '(default)' '' 'String'
+}
+
+Add-Task 'comfort' "Désactiver l'accélération de la souris" 'Mouvement de la souris plus précis et constant (apprécié en jeu).' $false -Run {
+    $p = 'HKCU:\Control Panel\Mouse'
+    Set-Reg $p 'MouseSpeed' '0' 'String'; Set-Reg $p 'MouseThreshold1' '0' 'String'; Set-Reg $p 'MouseThreshold2' '0' 'String'
+}
+
 # ---------------------------------------------------------------- Onglet 2 : applications
 # Préinstallées et inutiles pour la plupart des gens : cochées par défaut.
 $RecommendedApps = @(
@@ -319,6 +387,8 @@ $ProtectedPrograms = @('Microsoft Visual C++*', 'Microsoft .NET*', 'Microsoft Wi
     'Microsoft Windows Application Compatibility*', '*Pilote graphique*', '*Graphics Driver*')
 # Lancés au démarrage mais nécessaires (icône de Sécurité Windows)
 $ProtectedStartup = @('SecurityHealth')
+# Mises à jour de sécurité d'Edge, tâche interne de l'Explorateur, pilote audio Realtek : à garder actives.
+$ProtectedTasks = @('MicrosoftEdgeUpdate*', 'CreateExplorerShellUnelevatedTask', 'RtkAud*')
 
 function Import-AppRows {
     Set-Busy $true
@@ -471,6 +541,17 @@ function Import-BgRows {
         }
     }
 
+    # Tâches planifiées des autres éditeurs (programmes de mise à jour, assistants...)
+    $schTasks = Get-ScheduledTask -ErrorAction SilentlyContinue |
+        Where-Object { $_.TaskPath -notlike '\Microsoft\*' -and -not (Test-Like $_.TaskName $ProtectedTasks) }
+    foreach ($t in $schTasks) {
+        $exec = @($t.Actions | ForEach-Object { $_.Execute } | Where-Object { $_ }) -join ' ; '
+        $rows.Add([pscustomobject]@{
+            Kind = 'task'; Group = 'task'; Name = $t.TaskName; Type = 'Tâche planifiée'; Detail = $(if ($exec) { $exec } else { $t.TaskPath })
+            TaskName = $t.TaskName; TaskPath = $t.TaskPath; Disabled = ($t.State -eq 'Disabled'); Checked = $false
+        })
+    }
+
     $deny   = @(Get-RegValue $BgPolicy $BgDenyList)
     $global = Get-RegValue $BgPolicy 'LetAppsRunInBackground'
     if ($global -eq 2) { Write-Log '   Note : une stratégie bloque déjà toutes les applis du Store en arrière-plan.' }
@@ -488,7 +569,7 @@ function Import-BgRows {
 
     $script:BgRows = @($rows | Sort-Object Name)
     Show-BgRows
-    Write-Log "$(@($script:BgRows | Where-Object Group -eq 'startup').Count) programme(s) au démarrage, $(@($script:BgRows | Where-Object Group -eq 'bg').Count) appli(s) du Store pouvant tourner en arrière-plan."
+    Write-Log "$(@($script:BgRows | Where-Object Group -eq 'startup').Count) programme(s) au démarrage, $(@($script:BgRows | Where-Object Group -eq 'task').Count) tâche(s) planifiée(s), $(@($script:BgRows | Where-Object Group -eq 'bg').Count) appli(s) du Store pouvant tourner en arrière-plan."
     Set-Busy $false
 }
 
@@ -513,6 +594,10 @@ function Set-BgState($Row, [bool]$Disable) {
             $b = New-Object byte[] 12
             $b[0] = $(if ($Disable) { 3 } else { 2 })
             Set-Reg $Row.Approved $Row.ValueName $b 'Binary'
+        }
+        'task' {
+            if ($Disable) { Disable-ScheduledTask -TaskName $Row.TaskName -TaskPath $Row.TaskPath -ErrorAction Stop | Out-Null }
+            else          { Enable-ScheduledTask  -TaskName $Row.TaskName -TaskPath $Row.TaskPath -ErrorAction Stop | Out-Null }
         }
         'storetask' {
             Set-ItemProperty -LiteralPath $Row.RegPath -Name 'State' -Value $(if ($Disable) { 1 } else { 2 }) -Type DWord -ErrorAction Stop
@@ -597,6 +682,7 @@ $list = New-ListView @('Action', 'Gain estimé', 'Description') @(330, 100, 600)
     clean   = 'Nettoyage du disque'
     privacy = 'Confidentialité, publicités et suggestions'
     perf    = 'Performances'
+    comfort = 'Confort'
 })
 foreach ($t in $Tasks) {
     $it = New-Object System.Windows.Forms.ListViewItem($t.Name)
@@ -635,7 +721,8 @@ $tabApps = New-Tab 'Désinstaller des applications' @($appList, (New-ActionBar @
 # --- Onglet 3
 $bgList = New-ListView @('Nom', 'État', 'Type', 'Commande / identifiant') @(300, 90, 190, 420) ([ordered]@{
     startup = 'Lancés au démarrage de Windows'
-    bg      = 'Applications du Store autorisées à tourner en arrière-plan'
+    task    = 'Tâches planifiées (programmes de mise à jour, assistants...)'
+    bg      ='Applications du Store autorisées à tourner en arrière-plan'
 })
 $bgInfo = New-Object System.Windows.Forms.Label
 $bgInfo.Text = 'Cochez des lignes puis désactivez-les ou réactivez-les. Tout est réversible.'
