@@ -20,7 +20,8 @@ Pour recompiler l'exe vous-même : `Install-Module ps2exe -Scope CurrentUser` pu
 
 ### 1. Nettoyage et réglages
 - L'analyse se lance toute seule : la colonne « Gain estimé » montre la place récupérable.
-- Cochez / décochez les actions (survolez une ligne pour le détail), puis **Optimiser maintenant**.
+- Rien n'est coché au départ : vos réglages actuels restent tels quels. Cochez seulement ce que vous voulez
+  changer (ou **Sélection recommandée**), survolez une ligne pour le détail, puis **Optimiser maintenant**.
 - **Nettoyage :** fichiers temporaires, cache Windows Update, caches des navigateurs et des applis
   (Discord, Spotify, Steam), cache des shaders, anciens journaux, WinSxS, anciens installateurs de pilotes
   NVIDIA/AMD, stockage réservé (~7 Go)...
@@ -35,7 +36,7 @@ Pour recompiler l'exe vous-même : `Install-Module ps2exe -Scope CurrentUser` pu
 ### 2. Désinstaller des applications
 - Liste **toutes** les applications du Microsoft Store et les programmes installés, avec leur taille.
 - Les applications préinstallées inutiles (Bing Actualités, Solitaire, Clipchamp, Candy Crush, TikTok...) sont
-  pré-cochées dans le groupe « Recommandé » ; tout le reste est à cocher vous-même.
+  regroupées dans « Recommandé » (bouton **Sélection recommandée** pour les cocher) ; rien n'est coché au départ.
 - Une barre de recherche permet de retrouver une application.
 - Les programmes classiques ouvrent leur propre assistant de désinstallation.
 - Les éléments indispensables (Store, Sécurité Windows, Edge, Visual C++, .NET...) ne sont pas proposés.
@@ -54,6 +55,7 @@ Un journal est enregistré dans `Documents\OptimiseurWindows_<date>.log`.
 - Un **point de restauration** est créé avant la première modification (case cochée par défaut).
   Pour annuler : menu Démarrer → « Créer un point de restauration » → *Restauration du système*.
 - Les applications du Store supprimées se réinstallent depuis le Microsoft Store.
-- Les options risquées (corbeille, Windows.old, veille prolongée, alimentation, effets visuels) sont
-  **décochées par défaut**.
+- **Seul ce que vous cochez est modifié** ; tout le reste garde le réglage actuel de Windows.
+  Les options risquées (corbeille, Windows.old, veille prolongée, alimentation, effets visuels) ne font pas
+  partie de la sélection recommandée.
 - Rien n'est envoyé sur Internet ; tout le code est dans `OptimiseurWindows.ps1`, lisible.

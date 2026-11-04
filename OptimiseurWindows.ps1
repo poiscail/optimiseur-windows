@@ -376,8 +376,27 @@ Add-Task 'comfort' '« Fin de tâche » dans la barre des tâches' "Clic droit s
     Set-Reg "$Adv\TaskbarDeveloperSettings" 'TaskbarEndTask' 1
 }
 
-Add-Task 'comfort' 'Raccourci des touches rémanentes' "Plus de fenêtre « touches rémanentes » quand on appuie 5 fois sur Maj (en jeu notamment)." $true -Run {
-    Set-Reg 'HKCU:\Control Panel\Accessibility\StickyKeys' 'Flags' '506' 'String'
+Add-Task 'comfort' 'Désactiver les touches rémanentes' "Coupe les touches rémanentes (et touches filtres / bascule) et leurs raccourcis : plus de fenêtre quand on appuie 5 fois sur Maj ou qu'on garde Maj droite enfoncée." $true -Run {
+    $a = 'HKCU:\Control Panel\Accessibility'
+    Set-Reg "$a\StickyKeys" 'Flags' '506' 'String'
+    Set-Reg "$a\Keyboard Response" 'Flags' '122' 'String'
+    Set-Reg "$a\ToggleKeys" 'Flags' '58' 'String'
+    # Applique tout de suite (sans redémarrer) : SPI_SETSTICKYKEYS, raccourci et fonction désactivés.
+    if (-not ('StickyKeysApi' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class StickyKeysApi {
+    [StructLayout(LayoutKind.Sequential)] public struct STICKYKEYS { public uint cbSize; public uint dwFlags; }
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SystemParametersInfo(uint action, uint param, ref STICKYKEYS v, uint winIni);
+    public static bool Disable() {
+        STICKYKEYS s = new STICKYKEYS(); s.cbSize = (uint)Marshal.SizeOf(typeof(STICKYKEYS)); s.dwFlags = 506;
+        return SystemParametersInfo(0x003B, s.cbSize, ref s, 3);
+    }
+}
+'@
+    }
+    [void][StickyKeysApi]::Disable()
 }
 
 Add-Task 'comfort' 'Pas de redémarrage forcé après une mise à jour' "Windows attend que vous redémarriez vous-même au lieu de fermer vos programmes pendant que vous êtes connecté." $true -Run {
@@ -448,7 +467,7 @@ function Import-AppRows {
         $p = $g.Group[0]
         $reco = Test-Like $p.Name $RecommendedApps
         $rows.Add([pscustomobject]@{
-            Kind = 'store'; Id = $p.Name; Checked = $reco; Group = $(if ($reco) { 'reco' } else { 'store' })
+            Kind = 'store'; Id = $p.Name; Checked = $false; Group = $(if ($reco) { 'reco' } else { 'store' })
             Name = $(if ($names.ContainsKey($p.PackageFamilyName)) { $names[$p.PackageFamilyName] } else { $p.Name })
             Publisher = ($p.Publisher -replace '^CN=([^,]+).*', '$1'); Packages = @($g.Group)
             Size = Get-PathSize ($g.Group | ForEach-Object { $_.InstallLocation } | Select-Object -Unique)
@@ -731,7 +750,8 @@ foreach ($t in $Tasks) {
     [void]$it.SubItems.Add($(if ($t.Size) { '...' } else { '-' }))
     [void]$it.SubItems.Add($t.Desc)
     $it.Group = $list.Groups[$t.Group]
-    $it.Tag = $t; $it.Checked = $t.Default; $it.ToolTipText = $t.Desc
+    # Rien n'est coché au départ : seuls les réglages choisis par l'utilisateur sont modifiés.
+    $it.Tag = $t; $it.Checked = $false; $it.ToolTipText = $t.Desc
     [void]$list.Items.Add($it)
 }
 $btnRun     = New-PrimaryButton 'Optimiser maintenant' 170
