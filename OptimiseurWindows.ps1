@@ -262,13 +262,28 @@ Add-Task 'privacy' 'Suggestions, pubs et installations automatiques' "Retire les
     $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
     Set-Reg $adv 'Start_IrisRecommendations' 0
     Set-Reg $adv 'Start_AccountNotifications' 0
+    Set-Reg $adv 'ShowSyncProviderNotifications' 0   # pubs OneDrive/Microsoft 365 dans l'Explorateur
     Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement' 'ScoobeSystemSettingEnabled' 0
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate' 'CreateDesktopShortcutDefault' 0
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableWindowsConsumerFeatures' 1
 }
 
 Add-Task 'privacy' 'Recherche Bing dans le menu Démarrer' 'La recherche Windows ne cherche plus sur Internet : plus rapide et plus privée.' $true -Run {
     Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' 'BingSearchEnabled' 0
     Set-Reg 'HKCU:\Software\Policies\Microsoft\Windows\Explorer' 'DisableSearchBoxSuggestions' 1
+}
+
+Add-Task 'privacy' 'Historique de recherche et recherche dans le cloud' "La recherche Windows ne garde plus d'historique et ne fouille plus OneDrive, Outlook ni le compte Microsoft." $true -Run {
+    $s = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings'
+    Set-Reg $s 'IsDeviceSearchHistoryEnabled' 0; Set-Reg $s 'IsMSACloudSearchEnabled' 0; Set-Reg $s 'IsAADCloudSearchEnabled' 0
+}
+
+Add-Task 'privacy' 'Les sites ne lisent plus vos langues' "Les sites web ne reçoivent plus la liste de vos langues (sert à vous profiler)." $true -Run {
+    Set-Reg 'HKCU:\Control Panel\International\User Profile' 'HttpAcceptLanguageOptOut' 1
+}
+
+Add-Task 'privacy' "Désactiver « Localiser mon appareil »" "Le PC n'envoie plus régulièrement sa position à Microsoft. Vous ne pourrez plus le localiser en cas de vol." $false -Run {
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\FindMyDevice' 'AllowFindMyDevice' 0
 }
 
 Add-Task 'privacy' 'Widgets (actualités de la barre des tâches)' 'Désactive le panneau Widgets et son processus en arrière-plan.' $true -Run {
@@ -296,6 +311,8 @@ Add-Task 'privacy' 'Copilot, « Click to Do » et IA de Paint/Bloc-notes' 'Désa
     Set-Reg 'HKLM:\SOFTWARE\Policies\WindowsNotepad' 'DisableAIFeatures' 1
     $paint = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Paint'
     Set-Reg $paint 'DisableCocreator' 1; Set-Reg $paint 'DisableGenerativeFill' 1; Set-Reg $paint 'DisableImageCreator' 1
+    # Refuse aux applis l'accès aux modèles d'IA générative de Windows.
+    Set-Reg 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\systemAIModels' 'Value' 'Deny' 'String'
     Disable-Svc 'WSAIFabricSvc'
 }
 
@@ -316,6 +333,25 @@ Add-Task 'privacy' 'Publicités et suivi dans Edge' "Retire les recommandations,
 Add-Task 'perf' 'Capture de jeu en arrière-plan (Game DVR)' "Évite l'enregistrement vidéo permanent pendant les jeux (gain de FPS)." $true -Run {
     Set-Reg 'HKCU:\System\GameConfigStore' 'GameDVR_Enabled' 0
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' 'AllowGameDVR' 0
+    Set-Reg 'HKCU:\Software\Microsoft\GameBar' 'ShowStartupPanel' 0
+}
+
+Add-Task 'perf' 'Mode Jeu, planification GPU et jeux en fenêtre' "Active le Mode Jeu, la planification GPU accélérée (cartes récentes) et l'optimisation des jeux en fenêtre (moins de latence). Redémarrage nécessaire." $false -Run {
+    Set-Reg 'HKCU:\Software\Microsoft\GameBar' 'AllowAutoGameMode' 1
+    Set-Reg 'HKCU:\Software\Microsoft\GameBar' 'AutoGameModeEnabled' 1
+    Set-Reg 'HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers' 'HwSchMode' 2
+    # Ajoute SwapEffectUpgradeEnable=1 sans effacer les autres réglages DirectX déjà présents.
+    $k = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
+    $cur = [string](Get-RegValue $k 'DirectXUserGlobalSettings')
+    $cur = ($cur -replace 'SwapEffectUpgradeEnable=\d;?', '')
+    Set-Reg $k 'DirectXUserGlobalSettings' ($cur + 'SwapEffectUpgradeEnable=1;') 'String'
+}
+
+Add-Task 'perf' "Cartes réseau toujours actives" "Windows n'éteint plus la carte Wi-Fi/Ethernet pour économiser l'énergie (moins de coupures et de lag). Un peu plus de batterie utilisée sur portable." $false -Run {
+    Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Get-NetAdapterPowerManagement -ErrorAction SilentlyContinue | ForEach-Object {
+        try { $_.AllowComputerToTurnOffDevice = 'Disabled'; $_ | Set-NetAdapterPowerManagement -ErrorAction Stop; Write-Log "   - $($_.Name)" }
+        catch { Write-Log "   ! $($_.Name) : non modifiable" }
+    }
 }
 
 Add-Task 'perf' 'Services inutiles' 'Désactive : gestionnaire de cartes, mode démo magasin, télécopie, partage Windows Media Player.' $true -Run {
@@ -447,6 +483,27 @@ Add-Task 'comfort' "Retirer « Accueil » et « Galerie » de l'Explorateur" "Pa
         Set-Reg "HKCU:\Software\Classes\CLSID\$id" 'System.IsPinnedToNameSpaceTree' 0
     }
     Set-Reg $Adv 'LaunchTo' 1
+}
+
+Add-Task 'comfort' 'Désactiver l''exécution automatique (AutoPlay)' "Rien ne se lance tout seul quand on branche une clé USB, un téléphone ou un CD (plus sûr contre les virus)." $true -Run {
+    Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers' 'DisableAutoplay' 1
+}
+
+Add-Task 'comfort' 'Accès rapide sans fichiers récents' "L'Explorateur n'affiche plus vos fichiers récents ni vos dossiers fréquents (plus rapide et plus discret)." $false -Run {
+    $x = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer'
+    Set-Reg $x 'ShowRecent' 0; Set-Reg $x 'ShowFrequent' 0
+}
+
+Add-Task 'comfort' "Pas de « - Raccourci » dans le nom des raccourcis" "Les nouveaux raccourcis gardent juste le nom du programme." $false -Run {
+    Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\NamingTemplates' 'ShortcutNameTemplate' '%s.lnk' 'String'
+}
+
+Add-Task 'comfort' "Windows ne change plus l'imprimante par défaut" "L'imprimante par défaut reste celle que vous avez choisie." $false -Run {
+    Set-Reg 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows' 'LegacyDefaultPrinterMode' 1
+}
+
+Add-Task 'comfort' 'Autoriser les chemins de fichiers longs' 'Supprime la limite de 260 caractères (utile pour les gros projets, jeux moddés, archives).' $false -Run {
+    Set-Reg 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' 'LongPathsEnabled' 1
 }
 
 Add-Task 'comfort' 'Pavé numérique activé au démarrage' 'Verr. Num est allumé dès l''écran de connexion.' $false -Run {
