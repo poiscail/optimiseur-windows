@@ -195,6 +195,16 @@ $LogPaths = @("$WinDir\Logs\CBS\*.log", "$WinDir\Logs\CBS\*.cab", "$WinDir\Logs\
 Add-Task 'clean' 'Anciens journaux de Windows' "Fichiers .log des mises à jour et réparations, qui grossissent avec le temps." $true `
     -Size { Get-PathSize $LogPaths } -Run { Clear-Paths $LogPaths }
 
+$DriverInstallers = @("$env:ProgramData\NVIDIA Corporation\Downloader", "$Sys\AMD")
+Add-Task 'clean' 'Anciens installateurs de pilotes (NVIDIA, AMD)' 'Pilotes graphiques déjà installés, gardés en double sur le disque. Les pilotes en place ne sont pas touchés.' $true `
+    -Size { Get-PathSize $DriverInstallers } -Run { Clear-Paths $DriverInstallers }
+
+Add-Task 'clean' 'Stockage réservé de Windows' "Windows garde environ 7 Go pour ses mises à jour. Les libérer donne de la place, mais une grosse mise à jour pourra demander de faire de la place à ce moment-là." $false `
+    -Run {
+        $code = Start-Waiting "$WinDir\System32\Dism.exe" '/Online /Set-ReservedStorageState /State:Disabled'
+        Write-Log "   code de sortie DISM : $code"
+    }
+
 Add-Task 'clean' 'Vider la corbeille' 'Supprime définitivement le contenu de la corbeille.' $false `
     -Size { Get-PathSize (Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root '$Recycle.Bin' }) } `
     -Run { Clear-RecycleBin -Force -ErrorAction SilentlyContinue }
@@ -273,13 +283,24 @@ Add-Task 'privacy' 'Recall (captures IA de l''écran)' "Désactive l'enregistrem
     Set-Reg 'HKCU:\Software\Policies\Microsoft\Windows\WindowsAI' 'DisableAIDataAnalysis' 1
 }
 
-Add-Task 'privacy' 'Copilot et « Click to Do »' 'Désactive Copilot dans Windows et retire son bouton de la barre des tâches.' $true -Run {
+Add-Task 'privacy' 'Copilot, « Click to Do » et IA de Paint/Bloc-notes' 'Désactive Copilot dans Windows, retire son bouton, coupe les fonctions IA de Paint et du Bloc-notes et le service IA en arrière-plan.' $true -Run {
     foreach ($root in 'HKLM:\SOFTWARE', 'HKCU:\Software') {
         Set-Reg "$root\Policies\Microsoft\Windows\WindowsCopilot" 'TurnOffWindowsCopilot' 1
         Set-Reg "$root\Policies\Microsoft\Windows\WindowsAI" 'DisableClickToDo' 1
     }
     Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'ShowCopilotButton' 0
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'HubsSidebarEnabled' 0
+    Set-Reg 'HKLM:\SOFTWARE\Policies\WindowsNotepad' 'DisableAIFeatures' 1
+    $paint = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Paint'
+    Set-Reg $paint 'DisableCocreator' 1; Set-Reg $paint 'DisableGenerativeFill' 1; Set-Reg $paint 'DisableImageCreator' 1
+    Disable-Svc 'WSAIFabricSvc'
+}
+
+Add-Task 'privacy' 'Publicités et suivi dans Edge' "Retire les recommandations, l'assistant d'achat, Microsoft Rewards, l'actualité du nouvel onglet et l'envoi de données de diagnostic." $true -Run {
+    $e = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+    foreach ($n in 'ShowRecommendationsEnabled', 'EdgeShoppingAssistantEnabled', 'ShowMicrosoftRewards',
+                   'PersonalizationReportingEnabled', 'NewTabPageContentEnabled', 'DiagnosticData') { Set-Reg $e $n 0 }
+    Set-Reg $e 'HideFirstRunExperience' 1
 }
 
 # --- Performances
@@ -304,6 +325,18 @@ Add-Task 'perf' 'Ne plus partager les mises à jour avec d''autres PC' "Windows 
 Add-Task 'perf' 'Démarrage sans délai des programmes' 'Windows attend normalement une dizaine de secondes avant de lancer les programmes du démarrage.' $true -Run {
     $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize'
     Set-Reg $p 'StartupDelayInMSec' 0; Set-Reg $p 'WaitForIdleState' 0
+}
+
+Add-Task 'perf' 'Pas d''installation automatique de logiciels de périphériques' "Windows n'installe plus tout seul les applis des souris, claviers, écrans (Razer, Logitech, LG...) quand on les branche." $true -Run {
+    Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Device Metadata' 'PreventDeviceMetadataFromNetwork' 1
+}
+
+Add-Task 'perf' "Désactiver l'indexation de la recherche" 'Moins de lectures disque en arrière-plan (utile sur disque dur ou PC modeste). La recherche de fichiers sera plus lente.' $false -Run {
+    Disable-Svc 'WSearch'
+}
+
+Add-Task 'perf' 'Désactiver le démarrage rapide' "« Arrêter » éteint vraiment le PC : évite les bugs qui restent après un arrêt et les soucis de dual-boot. Le démarrage prend quelques secondes de plus." $false -Run {
+    Set-Reg 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' 'HiberbootEnabled' 0
 }
 
 Add-Task 'perf' 'Menus plus réactifs' "Réduit le délai d'ouverture des menus de 400 à 100 ms." $true -Run {
@@ -358,6 +391,15 @@ Add-Task 'comfort' 'Menu clic droit classique (Windows 10)' "Affiche directement
 Add-Task 'comfort' "Désactiver l'accélération de la souris" 'Mouvement de la souris plus précis et constant (apprécié en jeu).' $false -Run {
     $p = 'HKCU:\Control Panel\Mouse'
     Set-Reg $p 'MouseSpeed' '0' 'String'; Set-Reg $p 'MouseThreshold1' '0' 'String'; Set-Reg $p 'MouseThreshold2' '0' 'String'
+}
+
+Add-Task 'comfort' "L'Explorateur s'ouvre sur « Ce PC »" "Affiche directement vos disques au lieu de l'Accueil et des fichiers récents." $false -Run {
+    Set-Reg $Adv 'LaunchTo' 1
+}
+
+Add-Task 'comfort' 'Pavé numérique activé au démarrage' 'Verr. Num est allumé dès l''écran de connexion.' $false -Run {
+    Set-Reg 'HKCU:\Control Panel\Keyboard' 'InitialKeyboardIndicators' '2' 'String'
+    Set-Reg 'Registry::HKEY_USERS\.DEFAULT\Control Panel\Keyboard' 'InitialKeyboardIndicators' '2' 'String'
 }
 
 # ---------------------------------------------------------------- Onglet 2 : applications
