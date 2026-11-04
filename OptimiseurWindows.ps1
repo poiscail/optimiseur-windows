@@ -183,8 +183,10 @@ Add-Task 'clean' 'Cache des navigateurs (Edge, Chrome, Brave, Opera, Vivaldi, Fi
 
 $AppCaches = @(
     "$env:APPDATA\discord\Cache", "$env:APPDATA\discord\Code Cache", "$env:APPDATA\discord\GPUCache",
-    "$Lad\Spotify\Data", "$Lad\Steam\htmlcache")
-Add-Task 'clean' 'Cache des applications (Discord, Spotify, Steam)' 'Fermez ces applications avant. Les musiques téléchargées et les connexions sont conservées.' $true `
+    "$Lad\Spotify\Data", "$Lad\Steam\htmlcache",
+    "$Lad\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Cache",
+    "$Lad\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Code Cache")
+Add-Task 'clean' 'Cache des applications (Discord, Spotify, Steam, Teams)' 'Fermez ces applications avant. Les musiques téléchargées et les connexions sont conservées.' $true `
     -Size { Get-PathSize $AppCaches } -Run { Clear-Paths $AppCaches }
 
 $ShaderCaches = @("$Lad\D3DSCache", "$Lad\NVIDIA\DXCache", "$Lad\NVIDIA\GLCache", "$Lad\AMD\DxCache", "$Lad\AMD\DxcCache", "$Lad\AMD\GLCache")
@@ -238,6 +240,7 @@ Add-Task 'privacy' 'Réduire la télémétrie' 'Coupe la collecte de données de
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' 'DoNotShowFeedbackNotifications' 1
     Set-Reg 'HKCU:\Software\Microsoft\Siuf\Rules' 'NumberOfSIUFInPeriod' 0
     Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Privacy' 'TailoredExperiencesWithDiagnosticDataEnabled' 0
+    [Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', '1', 'Machine')
     Disable-Svc 'DiagTrack', 'dmwappushservice'
     Get-ScheduledTask -TaskPath '\Microsoft\Windows\Customer Experience Improvement Program\' -ErrorAction SilentlyContinue |
         Disable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
@@ -296,6 +299,12 @@ Add-Task 'privacy' 'Copilot, « Click to Do » et IA de Paint/Bloc-notes' 'Désa
     Disable-Svc 'WSAIFabricSvc'
 }
 
+Add-Task 'privacy' 'Désactiver la localisation' "Coupe le service de localisation et les mises à jour de cartes. La météo et Cartes ne trouveront plus votre position automatiquement." $false -Run {
+    Disable-Svc 'lfsvc'
+    Set-Reg 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' 'Value' 'Deny' 'String'
+    Set-Reg 'HKLM:\SYSTEM\Maps' 'AutoUpdateEnabled' 0
+}
+
 Add-Task 'privacy' 'Publicités et suivi dans Edge' "Retire les recommandations, l'assistant d'achat, Microsoft Rewards, l'actualité du nouvel onglet et l'envoi de données de diagnostic." $true -Run {
     $e = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
     foreach ($n in 'ShowRecommendationsEnabled', 'EdgeShoppingAssistantEnabled', 'ShowMicrosoftRewards',
@@ -329,6 +338,18 @@ Add-Task 'perf' 'Démarrage sans délai des programmes' 'Windows attend normalem
 
 Add-Task 'perf' 'Pas d''installation automatique de logiciels de périphériques' "Windows n'installe plus tout seul les applis des souris, claviers, écrans (Razer, Logitech, LG...) quand on les branche." $true -Run {
     Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Device Metadata' 'PreventDeviceMetadataFromNetwork' 1
+    # WPBT : logiciels que le BIOS du fabricant installe tout seul (ex. Armoury Crate, Lenovo Vantage).
+    Set-Reg 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' 'DisableWpbtExecution' 1
+}
+
+Add-Task 'perf' 'Priorité aux jeux et au réseau' "Windows donne plus de processeur et de carte graphique aux jeux et ne bride plus le réseau pendant le multimédia." $false -Run {
+    $mm = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile'
+    Set-Reg $mm 'SystemResponsiveness' 10
+    Set-Reg $mm 'NetworkThrottlingIndex' -1   # 0xFFFFFFFF = pas de bridage
+    Set-Reg "$mm\Tasks\Games" 'GPU Priority' 8
+    Set-Reg "$mm\Tasks\Games" 'Priority' 6
+    Set-Reg "$mm\Tasks\Games" 'Scheduling Category' 'High' 'String'
+    Set-Reg "$mm\Tasks\Games" 'SFIO Priority' 'High' 'String'
 }
 
 Add-Task 'perf' "Désactiver l'indexation de la recherche" 'Moins de lectures disque en arrière-plan (utile sur disque dur ou PC modeste). La recherche de fichiers sera plus lente.' $false -Run {
@@ -413,6 +434,18 @@ Add-Task 'comfort' "Désactiver l'accélération de la souris" 'Mouvement de la 
 }
 
 Add-Task 'comfort' "L'Explorateur s'ouvre sur « Ce PC »" "Affiche directement vos disques au lieu de l'Accueil et des fichiers récents." $false -Run {
+    Set-Reg $Adv 'LaunchTo' 1
+}
+
+Add-Task 'comfort' 'Barre des tâches épurée' 'Retire la grande zone de recherche (la touche Windows suffit pour chercher) et le bouton « Affichage des tâches ».' $false -Run {
+    Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' 'SearchboxTaskbarMode' 0
+    Set-Reg $Adv 'ShowTaskViewButton' 0
+}
+
+Add-Task 'comfort' "Retirer « Accueil » et « Galerie » de l'Explorateur" "Panneau de gauche plus simple ; l'Explorateur s'ouvre sur « Ce PC »." $false -Run {
+    foreach ($id in '{f874310e-b6b7-47dc-bc84-b9e6b38f5903}', '{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}') {
+        Set-Reg "HKCU:\Software\Classes\CLSID\$id" 'System.IsPinnedToNameSpaceTree' 0
+    }
     Set-Reg $Adv 'LaunchTo' 1
 }
 
